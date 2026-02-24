@@ -42,15 +42,6 @@ python download.py --dataset ESpeech/ESpeech-buldjat --output /media/4TB/ --tar 
 | --voice-name | Имя голоса | из названия датасета |
 | --tar | Путь до tar-архива (вместо скачивания) | — |
 
-Результат:
-
-
-<output>/buldjat_tts/
-├── wavs/
-│   ├── buldjat_00000.wav
-│   └── ...
-├── metadata.csv
-└── config.json
 
 
 ### 2. Настройка конфига
