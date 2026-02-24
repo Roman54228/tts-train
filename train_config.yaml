@@ -4,10 +4,10 @@
 # === Данные ===
 data:
   voice_name: "buldjat"
-  csv_path: /home/ladmin/e_data/buldjat_tts/metadata.csv
-  audio_dir: /home/ladmin/e_data/buldjat_tts/wavs
-  cache_dir: /home/ladmin/e_data/buldjat_tts/cache
-  config_path: /home/ladmin/e_data/buldjat_tts/config.json
+  csv_path: /media/4TB/buldjat_tts/metadata.csv
+  audio_dir: /media/4TB/buldjat_tts/wavs
+  cache_dir: /media/4TB/buldjat_tts/cache
+  config_path: /media/4TB/buldjat_tts/config.json
   espeak_voice: "ru"
   batch_size: 30
   num_workers: 2
