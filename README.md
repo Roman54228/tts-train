@@ -20,6 +20,13 @@ pip install -r req.txt
 
 Скрипт скачивает датасет с HuggingFace, конвертирует MP3 в WAV (22050 Hz, mono), фильтрует по длительности и качеству, формирует metadata.csv в формате LJSpeech.
 
+**Там бывают траблы с путем до tar архива, который качается с HF, поэтому можно поробовать запустить так**:
+```
+python download.py --dataset ESpeech/ESpeech-buldjat --output /media/4TB/
+```
+
+Если не скачается то запускать вот так с указанием пути до tar архива, они должны качаться в папку `home/ladmin/.cache/huggingface/hub/` Проверьте там
+
 ```
 python download.py --dataset ESpeech/ESpeech-buldjat --output /media/4TB/ --tar "/home/ladmin/.cache/huggingface/hub/datasets--ESpeech--ESpeech-buldjat/snapshots/38a8fafff54069010e00c342e66838c7b8f9d105/buldjat_stripped_archive.tar"
  

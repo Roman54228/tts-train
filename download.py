@@ -82,13 +82,12 @@ def download_dataset(dataset_name: str) -> tuple:
 
     # Ищем tar-архив в кэше
     from datasets import config as ds_config
-
+    ds_config.HF_DATASETS_CACHE = '/home/ladmin/.cache/huggingface'
     cache_base = os.path.join(
         str(ds_config.HF_DATASETS_CACHE),
         "hub",
         f"datasets--{dataset_name.replace('/', '--')}",
     )
-
     tar_path = None
     if os.path.isdir(cache_base):
         for root, _, files in os.walk(cache_base):
