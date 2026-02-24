@@ -1,0 +1,27 @@
+# Конфигурация обучения Piper TTS
+# Запуск: python train.py --config train_config.yaml
+
+# === Данные ===
+data:
+  voice_name: "buldjat"
+  csv_path: /home/ladmin/e_data/buldjat_tts/metadata.csv
+  audio_dir: /home/ladmin/e_data/buldjat_tts/wavs
+  cache_dir: /home/ladmin/e_data/buldjat_tts/cache
+  config_path: /home/ladmin/e_data/buldjat_tts/config.json
+  espeak_voice: "ru"
+  batch_size: 30
+  num_workers: 2
+
+# === Модель ===
+model:
+  sample_rate: 22050
+  # Чекпоинт вокодера для warm start (закомментируй если не нужен)
+  vocoder_warmstart_ckpt: epoch=4474-step=1521860.ckpt
+
+# === Тренер (PyTorch Lightning) ===
+trainer:
+  accelerator: gpu
+  devices: "[0]"
+  precision: 16
+  max_epochs: 5000
+  strategy: ddp_find_unused_parameters_true
