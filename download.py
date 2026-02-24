@@ -22,10 +22,8 @@
 """
 
 import argparse
-import json
 import os
 import sys
-import tarfile
 
 import librosa
 import numpy as np
@@ -68,45 +66,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def download_dataset(dataset_name: str) -> tuple:
-    """Скачивает датасет и возвращает (dataset, путь к tar-архиву)."""
+def download_dataset(dataset_name: str):
+    """Скачивает датасет и возвращает объект dataset."""
     print(f"Скачиваем {dataset_name}...")
     ds = load_dataset(dataset_name, split="train")
     print(f"Датасет загружен: {len(ds)} сэмплов")
-
-    # Ищем tar-архив в кэше
-    from datasets import config as ds_config
-
-    cache_base = os.path.join(
-        str(ds_config.HF_DATASETS_CACHE),
-        "hub",
-        f"datasets--{dataset_name.replace('/', '--')}",
-    )
-
-    tar_path = None
-    if os.path.isdir(cache_base):
-        for root, _, files in os.walk(cache_base):
-            for f in files:
-                if f.endswith(".tar"):
-                    tar_path = os.path.join(root, f)
-                    break
-            if tar_path:
-                break
-
-    return ds, tar_path
+    return ds
 
 
-def extract_archive(tar_path: str, extract_dir: str):
-    """Распаковывает tar-архив."""
-    print(f"Распаковка {tar_path}...")
-    os.makedirs(extract_dir, exist_ok=True)
-    with tarfile.open(tar_path, "r") as tar:
-        tar.extractall(extract_dir)
-    print(f"Распаковано в {extract_dir}/")
-
-
-def prepare_dataset(extract_dir: str, out_dir: str, voice_name: str, max_samples: int):
-    """Конвертирует MP3 в WAV и формирует metadata.csv."""
+def prepare_dataset(ds, out_dir: str, voice_name: str, max_samples: int):
+    """Извлекает аудио из датасета, конвертирует в WAV и формирует metadata.csv."""
     wavs_dir = os.path.join(out_dir, "wavs")
     os.makedirs(wavs_dir, exist_ok=True)
 
@@ -114,61 +83,50 @@ def prepare_dataset(extract_dir: str, out_dir: str, voice_name: str, max_samples
     metadata_lines = []
     skipped = 0
 
-    for root, _, files in os.walk(extract_dir):
-        json_files = [f for f in files if f.endswith(".json")]
-        if not json_files:
-            continue
-
-        json_path = os.path.join(root, json_files[0])
-        with open(json_path, "r", encoding="utf-8") as f:
-            segments = json.load(f)
-
-        audio_files = [f for f in files if f.endswith(".mp3")]
-        audio_files.sort(key=lambda x: int(x.replace(".mp3", "").split("_")[-1]))
-
-        if len(audio_files) != len(segments):
-            folder_id = os.path.basename(root)
-            print(
-                f"  WARN: {folder_id} — {len(audio_files)} аудио vs "
-                f"{len(segments)} сегментов, пропускаю"
-            )
-            skipped += len(audio_files)
-            continue
-
-        for audio_file, segment in zip(audio_files, segments):
-            if sample_count >= max_samples:
-                break
-
-            text = segment["text"].strip()
-            if len(text) < MIN_TEXT_LEN:
-                skipped += 1
-                continue
-
-            mp3_path = os.path.join(root, audio_file)
-            try:
-                y, _ = librosa.load(mp3_path, sr=SAMPLE_RATE, mono=True)
-            except Exception:
-                skipped += 1
-                continue
-
-            duration = len(y) / SAMPLE_RATE
-            if duration < MIN_DURATION or duration > MAX_DURATION:
-                skipped += 1
-                continue
-
-            peak = np.max(np.abs(y))
-            if peak < MIN_PEAK:
-                skipped += 1
-                continue
-            y = y / peak
-
-            wav_name = f"{voice_name}_{sample_count:05d}.wav"
-            sf.write(os.path.join(wavs_dir, wav_name), y, SAMPLE_RATE)
-            metadata_lines.append(f"{wav_name}|{text}")
-            sample_count += 1
-
+    for item in ds:
         if sample_count >= max_samples:
             break
+
+        text = item.get("text", "").strip()
+        if len(text) < MIN_TEXT_LEN:
+            skipped += 1
+            continue
+
+        # Извлекаем аудио из датасета
+        audio = item.get("audio")
+        if audio is None:
+            skipped += 1
+            continue
+
+        try:
+            # HF datasets возвращает audio как dict с array и sampling_rate
+            audio_array = np.array(audio["array"], dtype=np.float32)
+            src_sr = audio["sampling_rate"]
+
+            # Ресемплируем если нужно
+            if src_sr != SAMPLE_RATE:
+                audio_array = librosa.resample(
+                    audio_array, orig_sr=src_sr, target_sr=SAMPLE_RATE
+                )
+        except Exception:
+            skipped += 1
+            continue
+
+        duration = len(audio_array) / SAMPLE_RATE
+        if duration < MIN_DURATION or duration > MAX_DURATION:
+            skipped += 1
+            continue
+
+        peak = np.max(np.abs(audio_array))
+        if peak < MIN_PEAK:
+            skipped += 1
+            continue
+        audio_array = audio_array / peak
+
+        wav_name = f"{voice_name}_{sample_count:05d}.wav"
+        sf.write(os.path.join(wavs_dir, wav_name), audio_array, SAMPLE_RATE)
+        metadata_lines.append(f"{wav_name}|{text}")
+        sample_count += 1
 
     # metadata.csv
     csv_path = os.path.join(out_dir, "metadata.csv")
@@ -219,19 +177,11 @@ def main():
     out_dir = os.path.join(args.output, f"{voice_name}_tts")
 
     # 1. Скачиваем
-    _, tar_path = download_dataset(args.dataset)
+    ds = download_dataset(args.dataset)
 
-    if not tar_path:
-        print("ОШИБКА: tar-архив не найден в кэше датасета", file=sys.stderr)
-        sys.exit(1)
-
-    # 2. Распаковываем
-    extract_dir = os.path.join(args.output, f"{voice_name}_raw")
-    extract_archive(tar_path, extract_dir)
-
-    # 3. Конвертируем
+    # 2. Конвертируем
     print(f"\nПодготовка датасета (макс. {args.max_samples} сэмплов)...")
-    count = prepare_dataset(extract_dir, out_dir, voice_name, args.max_samples)
+    count = prepare_dataset(ds, out_dir, voice_name, args.max_samples)
 
     if count == 0:
         print("ОШИБКА: не удалось подготовить ни одного сэмпла", file=sys.stderr)
